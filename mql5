@@ -1,0 +1,124 @@
+
+// Program: Night Scalper EU
+// Developer: Forex Robot Easy Team
+// Developer's site: forexroboteasy.com
+
+// Include necessary libraries
+#include <Trade\Trade.mqh>
+#include <Trade\TradeConstants.mqh>
+#include <Trade\TradeErrors.mqh>
+#include <Trade\TradeOperation.mqh>
+#include <Trade\TradeSignal.mqh>
+#include <Trade\TradeState.mqh>
+#include <Trade\TradeTime.mqh>
+
+// Define parameters
+input double riskPercentage = 1.0;  // Risk percentage per trade
+input double stopLossPercentage = 0.5;  // Stop-loss percentage
+input double takeProfitPercentage = 1.0;  // Take-profit percentage
+
+// Define trade variables
+CTrade trade;
+ENUM_TRADE_REQUEST_ACTIONS tradeAction;
+double entryPrice;
+double stopLossPrice;
+double takeProfitPrice;
+double tradeVolume;
+double maxDrawdown;
+
+// Define entry function
+void OpenTrade()
+{
+    // Determine entry points using technical indicators, price levels, etc.
+    double entryPoint = iClose(_Symbol, PERIOD_M5, 1);  // Example: Use previous candle's close price as entry point
+
+    // Calculate trade volume based on risk percentage
+    tradeVolume = AccountFreeMargin() * riskPercentage / 100.0 / _Symbol.TickValue;
+
+    // Calculate stop-loss and take-profit prices
+    stopLossPrice = entryPoint - stopLossPercentage * _Symbol.Point;
+    takeProfitPrice = entryPoint + takeProfitPercentage * _Symbol.Point;
+
+    // Open trade
+    tradeAction = trade.Sell(_Symbol, tradeVolume, entryPoint, 0, stopLossPrice, takeProfitPrice, 'Night Scalper EU');
+    if (tradeAction == TRADE_ACTION_DEAL)
+    {
+        Print('Trade opened successfully');
+    }
+    else
+    {
+        Print('Failed to open trade. Error code: ', trade.ResultRetcode());
+    }
+}
+
+// Define exit function
+void CloseTrade()
+{
+    // Close trade
+    tradeAction = trade.PositionClose(_Symbol);
+    if (tradeAction == TRADE_ACTION_DEAL)
+    {
+        Print('Trade closed successfully');
+    }
+    else
+    {
+        Print('Failed to close trade. Error code: ', trade.ResultRetcode());
+    }
+}
+
+// Define risk management function
+void AdjustRiskParameters()
+{
+    // Adjust trade size based on current drawdown
+    double currentDrawdown = AccountEquity() - AccountBalance();
+    if (currentDrawdown > maxDrawdown)
+    {
+        tradeVolume *= maxDrawdown / currentDrawdown;
+    }
+
+    // Adjust stop-loss and take-profit prices based on current market conditions
+    stopLossPrice = entryPrice - stopLossPercentage * _Symbol.Point;
+    takeProfitPrice = entryPrice + takeProfitPercentage * _Symbol.Point;
+}
+
+// Define trade monitoring function
+void MonitorTrade()
+{
+    // Get trade information
+    CTradePosition tradePosition;
+    trade.PositionGet(_Symbol, tradePosition);
+
+    // Calculate profit/loss
+    double profitLoss = tradePosition.Profit();
+
+    // Print trade information
+    Print('Open positions: ', trade.PositionsTotal());
+    Print('Profit/Loss: ', profitLoss);
+    Print('Account balance: ', AccountBalance());
+}
+
+// Define main function
+void OnTick()
+{
+    // Check if trade is open
+    if (trade.PositionsTotal() == 0)
+    {
+        // Open new trade
+        OpenTrade();
+    }
+    else
+    {
+        // Monitor existing trade
+        MonitorTrade();
+
+        // Adjust risk parameters if necessary
+        AdjustRiskParameters();
+
+        // Check if trade should be closed
+        if (AccountEquity() <= AccountBalance() * maxDrawdown / 100.0)
+        {
+            // Close trade
+            CloseTrade();
+        }
+    }
+}
